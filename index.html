@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>重機AI検知デモ</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+</head>
+<body>
+  <h1>ラップトップAI検知テスト</h1>
+  <video id="video" autoplay muted width="640" height="480"></video>
+  <canvas id="canvas" style="position:absolute; left:0; top:60px;"></canvas>
+
+  <script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+
+    // カメラを起動
+    navigator.mediaDevices.getUserMedia({video: true}).then(stream => {
+      video.srcObject = stream;
+      video.onloadedmetadata = () => {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        loadModel();
+      };
+    });
+
+    async function loadModel() {
+      const model = await cocoSsd.load();
+      detect(model);
+    }
+
+    async function detect(model) {
+      const predictions = await model.detect(video);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      predictions.forEach(p => {
+        if(p.class === 'person') {
+          // 人を見つけたら赤い枠と文字を表示
+          ctx.strokeStyle = '#FF0000';
+          ctx.lineWidth = 4;
+          ctx.strokeRect(...p.bbox);
+          ctx.fillStyle = '#FF0000';
+          ctx.fillText('警告: 人を検知！', p.bbox[0], p.bbox[1] - 10);
+        }
+      });
+      requestAnimationFrame(() => detect(model));
+    }
+  </script>
+</body>
+</html>
