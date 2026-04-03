@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>重機安全AIデモ_距離判定版</title>
+  <title>重機安全AIデモ_バイブ搭載版</title>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
   <style>
@@ -18,7 +18,7 @@
   </style>
 </head>
 <body>
-  <div id="status">AI準備中...</div>
+  <div id="status">AI準備中...画面を1回タップして開始</div>
   <video id="video" autoplay muted playsinline></video>
   <canvas id="canvas"></canvas>
 
@@ -28,9 +28,19 @@
     const ctx = canvas.getContext('2d');
     const statusDiv = document.getElementById('status');
 
-    // --- デモ用：距離判定のしきい値（ピクセル高さ） ---
-    const DIST_NEAR = 450;  // これより大きいと「赤（危険）」
-    const DIST_MID  = 250;  // これより大きいと「黄（注意）」、小さいと「緑（安全）」
+    const DIST_NEAR = 450;  // 赤：バイブ発動
+    const DIST_MID  = 250;  // 黄：注意
+
+    // バイブの連打を防ぐためのフラグ
+    let lastVibrateTime = 0;
+
+    // 画面タップでバイブと音声の権限を有効化（ブラウザの仕様対策）
+    window.addEventListener('click', () => {
+        if (navigator.vibrate) {
+            navigator.vibrate(100); // 軽くテスト振動
+            statusDiv.innerText = "バイブ有効化完了";
+        }
+    });
 
     navigator.mediaDevices.getUserMedia({
       video: { facingMode: "environment" }
@@ -51,49 +61,52 @@
     }
 
     async function detect(model) {
-      // 安定して出ている 0.3 の感度を維持
       const predictions = await model.detect(video, 20, 0.3);
-      
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       
-      let detectedCount = 0;
+      let dangerFound = false;
 
       predictions.forEach(p => {
         if(p.class === 'person') {
-          detectedCount++;
           const [x, y, width, height] = p.bbox;
           const score = Math.round(p.score * 100);
           
-          // --- 距離による判定ロジック ---
-          let color = '#00FF00'; // 緑（遠い）
+          let color = '#00FF00';
           let msg = '安全';
 
           if (height > DIST_NEAR) {
-            color = '#FF0000'; // 赤（近い）
+            color = '#FF0000';
             msg = '危険！';
+            dangerFound = true; // 危険フラグを立てる
           } else if (height > DIST_MID) {
-            color = '#FFFF00'; // 黄（中間）
+            color = '#FFFF00';
             msg = '注意';
           }
 
-          // 枠を描画
           ctx.strokeStyle = color;
           ctx.lineWidth = 15;
           ctx.strokeRect(x, y, width, height);
           
-          // 文字を描画（背景をつけて読みやすく）
           ctx.fillStyle = color;
           ctx.font = 'bold 45px sans-serif';
-          const label = `${msg} (${score}%)`;
-          ctx.fillText(label, x, y > 60 ? y - 20 : 60);
-
-          // ステータス表示を更新
+          ctx.fillText(`${msg} (${score}%)`, x, y > 60 ? y - 20 : 60);
+          
           statusDiv.style.color = color;
           statusDiv.innerText = `状況: ${msg}`;
         }
       });
 
-      if (detectedCount === 0) {
+      // --- バイブレーション実行 ---
+      if (dangerFound && navigator.vibrate) {
+        const now = Date.now();
+        // 0.5秒間隔で「ブブッ、ブブッ」と震わせる
+        if (now - lastVibrateTime > 500) {
+          navigator.vibrate([200, 100, 200]); 
+          lastVibrateTime = now;
+        }
+      }
+
+      if (predictions.filter(p => p.class === 'person').length === 0) {
         statusDiv.style.color = '#fff';
         statusDiv.innerText = "監視中（ターゲットなし）";
       }
