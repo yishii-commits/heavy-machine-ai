@@ -3,63 +3,91 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>現場用AI検知システム</title>
+  <title>重機安全デモ (3段階距離検知)</title>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
   <style>
     body { margin: 0; overflow: hidden; background: #000; position: relative; width: 100vw; height: 100vh; }
-    /* ビデオを画面いっぱいに広げる（アスペクト比維持） */
     #video { width: 100%; height: 100%; object-fit: cover; }
-    /* キャンバスをビデオに完全に重ねる */
     #canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; }
+    /* 画面上部に現在のステータスを表示（デモ用） */
+    #status {
+      position: absolute; top: 10px; left: 10px;
+      background: rgba(0,0,0,0.7); color: white; padding: 5px 10px;
+      font-family: sans-serif; font-size: 14px; border-radius: 5px; pointer-events: none;
+    }
   </style>
 </head>
 <body>
   <video id="video" autoplay muted playsinline></video>
   <canvas id="canvas"></canvas>
+  <div id="status">モデル読み込み中...</div>
 
   <script>
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
+    const statusDiv = document.getElementById('status');
 
-    // カメラ起動（背面カメラ優先）
+    // --- 【デモ用：距離判定の閾値（ピクセル高さ）】 ---
+    // スマホのカメラや設置位置に合わせて、この数値を調整してください。
+    const THRESHOLD_NEAR = 400; // これより大きい（高い）と「赤（近い）」
+    const THRESHOLD_MIDDLE = 200; // これより大きいと「黄（中間）」、小さいと「緑（遠い）」
+
+    // カメラ起動
     navigator.mediaDevices.getUserMedia({
       video: { facingMode: "environment" }
     }).then(stream => {
       video.srcObject = stream;
       video.onloadedmetadata = () => {
-        // 重要：表示サイズではなく、ビデオ本来の解像度をキャンバスにセット
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
+        statusDiv.innerText = "AI起動中...";
         loadModel();
       };
     });
 
     async function loadModel() {
       const model = await cocoSsd.load();
+      statusDiv.innerText = "監視中 (画面をタップして音声を有効化)";
       detect(model);
     }
 
     async function detect(model) {
-      const predictions = await model.detect(video);
+      // 自信度（score）を0.5以上に設定して、誤検知を減らす
+      const predictions = await model.detect(video, { minScore: 0.5 });
       
-      // 描画をクリア
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       
       predictions.forEach(p => {
         if(p.class === 'person') {
           const [x, y, width, height] = p.bbox;
           
-          // 枠を描画（ビデオの生データに対して描くのでズレない）
-          ctx.strokeStyle = '#00FF00';
+          let boxColor = '#00FF00'; // デフォルト：緑（遠い）
+          let zoneText = '遠い (安全)';
+
+          // --- 距離（枠の高さ）による判定ロジック ---
+          if (height > THRESHOLD_NEAR) {
+            boxColor = '#FF0000'; // 赤（近い・危険）
+            zoneText = '近い (危険！)';
+          } else if (height > THRESHOLD_MIDDLE) {
+            boxColor = '#FFFF00'; // 黄（中間・注意）
+            zoneText = '中間 (注意)';
+          }
+
+          // 枠を描画
+          ctx.strokeStyle = boxColor;
           ctx.lineWidth = 15; // 現場で見やすい極太枠
           ctx.strokeRect(x, y, width, height);
           
-          // 文字を描画
-          ctx.fillStyle = '#00FF00';
-          ctx.font = 'bold 50px sans-serif';
-          ctx.fillText(`警告: 人! (${Math.round(p.score * 100)}%)`, x, y > 60 ? y - 20 : 70);
+          // 文字を描画（背景付きで見やすく）
+          ctx.font = 'bold 40px sans-serif';
+          const textWidth = ctx.measureText(zoneText).width;
+          ctx.fillStyle = boxColor;
+          ctx.fillRect(x, y > 60 ? y - 60 : 0, textWidth + 20, 50); // 文字の背景
+          
+          ctx.fillStyle = '#000000'; // 文字色は黒
+          ctx.fillText(zoneText, x + 10, y > 60 ? y - 20 : 40);
         }
       });
       requestAnimationFrame(() => detect(model));
