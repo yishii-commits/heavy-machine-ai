@@ -21,12 +21,45 @@
         #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 10000; display: flex; flex-direction: column; justify-content: center; align-items: center; color: white; }
         #startBtn { padding: 25px 50px; font-size: 28px; background: #ff4444; color: white; border: none; border-radius: 50px; cursor: pointer; font-weight: bold; }
 
-        /* 設定パネル (右1/3) */
+        /* 設定パネル (修正版) */
         #gearBtn { position: fixed; top: 15px; right: 15px; z-index: 2000; font-size: 35px; background: none; border: none; color: white; cursor: pointer; text-shadow: 0 0 5px #000; }
-        #sidePanel { position: fixed; top: 0; right: 0; width: 33%; height: 100%; background: rgba(0,0,0,0.85); color: white; padding: 20px; z-index: 1900; display: none; box-sizing: border-box; border-left: 2px solid #555; }
-        .set-group { margin-top: 40px; text-align: center; }
+        #sidePanel { 
+            position: fixed; 
+            top: 0; 
+            right: 0; 
+            width: 33%; 
+            height: 100%; 
+            background: rgba(0,0,0,0.9); 
+            color: white; 
+            padding: 20px; 
+            z-index: 1900; 
+            display: none; 
+            box-sizing: border-box; 
+            border-left: 2px solid #555;
+            /* スクロール可能にする修正 */
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        /* スマホ向けの幅調整 */
+        @media screen and (max-width: 768px) {
+            #sidePanel { width: 80%; }
+        }
+
+        .set-group { margin-top: 30px; text-align: center; }
         .set-btn { width: 100%; padding: 20px 10px; border: none; border-radius: 12px; font-weight: bold; font-size: 16px; cursor: pointer; margin-bottom: 8px; }
-        #closePanel { position: absolute; bottom: 30px; left: 20px; right: 20px; padding: 15px; background: #555; color: white; border: none; border-radius: 8px; }
+        
+        #closePanel { 
+            margin-top: 40px; 
+            margin-bottom: 40px; /* 下部に余白を作る */
+            width: 100%; 
+            padding: 15px; 
+            background: #555; 
+            color: white; 
+            border: none; 
+            border-radius: 8px; 
+            cursor: pointer;
+        }
         
         /* ステータス表示 */
         #info { position: fixed; top: 15px; left: 15px; color: #0f0; z-index: 500; font-weight: bold; background: rgba(0,0,0,0.5); padding: 5px 10px; border-radius: 5px; }
@@ -35,7 +68,7 @@
 <body>
 
 <div id="overlay">
-    <h1 style="margin-bottom:30px;">重機周囲監視システム</h1>
+    <h1 style="margin-bottom:30px; text-align:center; padding:0 20px;">重機周囲監視システム</h1>
     <button id="startBtn">監視を開始する</button>
     <p style="margin-top:20px; color:#aaa;">※ボタンを押すとアラート音が有効になります</p>
 </div>
@@ -52,6 +85,7 @@
 
 <div id="sidePanel">
     <h2 style="text-align:center; margin-bottom:10px;">距離調整</h2>
+    <p style="font-size:12px; color:#ccc; text-align:center;">カメラから指定の距離に立ち、ボタンを押して判定サイズを更新します。</p>
     <hr>
     
     <div class="set-group">
@@ -100,7 +134,7 @@
     // カメラ起動
     async function setupCamera() {
         const stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: "environment" }, // 外カメラ優先
+            video: { facingMode: "environment" }, 
             audio: false
         });
         video.srcObject = stream;
@@ -115,7 +149,7 @@
         lastPredictions = predictions;
         
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        let maxStatus = "safe"; // safe, warning, danger
+        let maxStatus = "safe"; 
 
         predictions.forEach(p => {
             if (p.class === 'person') {
@@ -123,9 +157,9 @@
                 const y = p.bbox[1];
                 const w = p.bbox[2];
                 const h = p.bbox[3];
-                const size = Math.max(w, h); // 縦か横の長い方を基準にする
+                const size = Math.max(w, h);
 
-                let color = "#00FF00"; // デフォルト緑
+                let color = "#00FF00"; 
                 if (size >= DIST_RED) {
                     color = "#FF0000";
                     maxStatus = "danger";
@@ -134,7 +168,6 @@
                     if (maxStatus !== "danger") maxStatus = "warning";
                 }
 
-                // 運用では消してもいいが、デモ用に薄く枠を表示
                 ctx.strokeStyle = color;
                 ctx.lineWidth = 4;
                 ctx.strokeRect(x, y, w, h);
@@ -154,7 +187,7 @@
         if (status === "danger") {
             alertFrame.classList.add("danger-border");
             if (now - lastAlertTime > 200) {
-                playBeep(880, 100); // 高い音
+                playBeep(880, 100); 
                 if (navigator.vibrate) navigator.vibrate(200);
                 lastAlertTime = now;
             }
@@ -163,7 +196,7 @@
         } else if (status === "warning") {
             alertFrame.classList.add("warning-border");
             if (now - lastAlertTime > 600) {
-                playBeep(440, 200); // 低い音
+                playBeep(440, 200); 
                 lastAlertTime = now;
             }
             document.getElementById('info').innerText = "⚡ 注意：接近";
@@ -190,6 +223,7 @@
             DIST_YELLOW = maxSize;
             document.getElementById('yellowVal').innerText = Math.round(maxSize);
         }
+        alert("設定を更新しました。");
     }
 
     // イベントリスナー
@@ -215,9 +249,6 @@
 
     document.getElementById('setRedBtn').onclick = () => captureSize('red');
     document.getElementById('setYellowBtn').onclick = () => captureSize('yellow');
-
-    // 画面消灯防止のハック (小さな動画を再生し続ける)
-    // 現場ではスマホの設定で「画面消灯なし」にするのが確実です
 </script>
 </body>
 </html>
