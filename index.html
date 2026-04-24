@@ -11,66 +11,29 @@
         #video-container { position: relative; width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }
         video, canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain; }
         
-        /* 警告枠のエフェクト */
         #alert-frame { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; border: 0px solid red; box-sizing: border-box; }
         .danger-border { border: 20px solid red !important; animation: blink 0.5s infinite; }
         .warning-border { border: 20px solid yellow !important; }
         @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0; } 100% { opacity: 1; } }
 
-        /* スタート画面 */
-        #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 10000; display: flex; flex-direction: column; justify-content: center; align-items: center; color: white; }
+        #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 10000; display: flex; flex-direction: column; justify-content: center; align-items: center; color: white; text-align: center; }
         #startBtn { padding: 25px 50px; font-size: 28px; background: #ff4444; color: white; border: none; border-radius: 50px; cursor: pointer; font-weight: bold; }
 
-        /* 設定パネル (修正版) */
         #gearBtn { position: fixed; top: 15px; right: 15px; z-index: 2000; font-size: 35px; background: none; border: none; color: white; cursor: pointer; text-shadow: 0 0 5px #000; }
-        #sidePanel { 
-            position: fixed; 
-            top: 0; 
-            right: 0; 
-            width: 33%; 
-            height: 100%; 
-            background: rgba(0,0,0,0.9); 
-            color: white; 
-            padding: 20px; 
-            z-index: 1900; 
-            display: none; 
-            box-sizing: border-box; 
-            border-left: 2px solid #555;
-            /* スクロール可能にする修正 */
-            overflow-y: auto;
-            -webkit-overflow-scrolling: touch;
-        }
-
-        /* スマホ向けの幅調整 */
-        @media screen and (max-width: 768px) {
-            #sidePanel { width: 80%; }
-        }
-
+        #sidePanel { position: fixed; top: 0; right: 0; width: 33%; height: 100%; background: rgba(0,0,0,0.85); color: white; padding: 20px; z-index: 1900; display: none; box-sizing: border-box; border-left: 2px solid #555; overflow-y: auto; }
         .set-group { margin-top: 30px; text-align: center; }
         .set-btn { width: 100%; padding: 20px 10px; border: none; border-radius: 12px; font-weight: bold; font-size: 16px; cursor: pointer; margin-bottom: 8px; }
+        #closePanel { width: 100%; margin-top: 40px; padding: 15px; background: #555; color: white; border: none; border-radius: 8px; }
         
-        #closePanel { 
-            margin-top: 40px; 
-            margin-bottom: 40px; /* 下部に余白を作る */
-            width: 100%; 
-            padding: 15px; 
-            background: #555; 
-            color: white; 
-            border: none; 
-            border-radius: 8px; 
-            cursor: pointer;
-        }
-        
-        /* ステータス表示 */
-        #info { position: fixed; top: 15px; left: 15px; color: #0f0; z-index: 500; font-weight: bold; background: rgba(0,0,0,0.5); padding: 5px 10px; border-radius: 5px; }
+        #info { position: fixed; top: 15px; left: 15px; color: #0f0; z-index: 500; font-weight: bold; background: rgba(0,0,0,0.5); padding: 10px 15px; border-radius: 5px; font-size: 18px; }
     </style>
 </head>
 <body>
 
 <div id="overlay">
-    <h1 style="margin-bottom:30px; text-align:center; padding:0 20px;">重機周囲監視システム</h1>
+    <h1 style="margin-bottom:30px;">重機周囲監視システム</h1>
     <button id="startBtn">監視を開始する</button>
-    <p style="margin-top:20px; color:#aaa;">※ボタンを押すとアラート音が有効になります</p>
+    <p style="margin-top:20px; color:#aaa;">※AI読み込みに数秒かかります</p>
 </div>
 
 <div id="video-container">
@@ -85,18 +48,17 @@
 
 <div id="sidePanel">
     <h2 style="text-align:center; margin-bottom:10px;">距離調整</h2>
-    <p style="font-size:12px; color:#ccc; text-align:center;">カメラから指定の距離に立ち、ボタンを押して判定サイズを更新します。</p>
     <hr>
     
     <div class="set-group">
         <p style="color:#ff4444; font-weight:bold;">🔴 危険 (至近距離)</p>
-        <button id="setRedBtn" class="set-btn" style="background:#ff4444; color:white;">2mに立ってセット</button>
+        <button id="setRedBtn" class="set-btn" style="background:#ff4444; color:white;">カメラの前に立ち<br>2m設定で保存</button>
         <p>設定値: <span id="redVal">450</span> px</p>
     </div>
 
     <div class="set-group">
         <p style="color:#ffeb3b; font-weight:bold;">🟡 注意 (中間距離)</p>
-        <button id="setYellowBtn" class="set-btn" style="background:#ffeb3b; color:black;">5mに立ってセット</button>
+        <button id="setYellowBtn" class="set-btn" style="background:#ffeb3b; color:black;">カメラの前に立ち<br>5m設定で保存</button>
         <p>設定値: <span id="yellowVal">250</span> px</p>
     </div>
 
@@ -107,113 +69,135 @@
     let model;
     let video = document.getElementById('webcam');
     let canvas = document.getElementById('canvas');
-    let ctx = canvas.getContext('2d');
+    let ctx = canvas.getContext('2d', { alpha: true });
     let alertFrame = document.getElementById('alert-frame');
     let lastPredictions = [];
     
-    // 設定値
+    // 距離の閾値（初期値）
     let DIST_RED = 450;
     let DIST_YELLOW = 250;
     let isMonitoring = false;
 
-    // オーディオ設定 (Beep音の生成)
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    
     function playBeep(freq, duration) {
-        if (!isMonitoring) return;
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = "square";
-        osc.frequency.value = freq;
-        gain.gain.value = 0.1;
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start();
-        setTimeout(() => osc.stop(), duration);
+        if (!isMonitoring || audioCtx.state === 'suspended') return;
+        try {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = "square";
+            osc.frequency.value = freq;
+            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration/1000);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + duration/1000);
+        } catch(e) { console.error("Audio error", e); }
     }
 
-    // カメラ起動
     async function setupCamera() {
-        const stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: "environment" }, 
+        const constraints = {
+            video: { 
+                facingMode: "environment",
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+            },
             audio: false
-        });
+        };
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
         video.srcObject = stream;
         return new Promise((resolve) => {
-            video.onloadedmetadata = () => resolve(video);
+            video.onloadedmetadata = () => {
+                video.play();
+                resolve(video);
+            };
         });
     }
 
-    // 物体検知ループ
     async function detect() {
-        const predictions = await model.detect(video);
-        lastPredictions = predictions;
-        
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        let maxStatus = "safe"; 
+        if (!isMonitoring) return;
 
-        predictions.forEach(p => {
-            if (p.class === 'person') {
-                const x = p.bbox[0];
-                const y = p.bbox[1];
-                const w = p.bbox[2];
-                const h = p.bbox[3];
-                const size = Math.max(w, h);
-
-                let color = "#00FF00"; 
-                if (size >= DIST_RED) {
-                    color = "#FF0000";
-                    maxStatus = "danger";
-                } else if (size >= DIST_YELLOW) {
-                    color = "#FFFF00";
-                    if (maxStatus !== "danger") maxStatus = "warning";
-                }
-
-                ctx.strokeStyle = color;
-                ctx.lineWidth = 4;
-                ctx.strokeRect(x, y, w, h);
+        try {
+            const predictions = await model.detect(video, 3, 0.4); // 検出数制限とスコア下限で高速化
+            lastPredictions = predictions;
+            
+            // キャンバスのリサイズ確認
+            if (canvas.width !== video.videoWidth) {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
             }
-        });
 
-        updateAlert(maxStatus);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            let maxStatus = "safe";
+
+            for (let i = 0; i < predictions.length; i++) {
+                const p = predictions[i];
+                if (p.class === 'person') {
+                    const [x, y, w, h] = p.bbox;
+                    const size = Math.max(w, h);
+
+                    let color = "#00FF00";
+                    if (size >= DIST_RED) {
+                        color = "#FF0000";
+                        maxStatus = "danger";
+                    } else if (size >= DIST_YELLOW) {
+                        color = "#FFFF00";
+                        if (maxStatus !== "danger") maxStatus = "warning";
+                    }
+
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 6;
+                    ctx.strokeRect(x, y, w, h);
+                }
+            }
+            updateAlert(maxStatus);
+        } catch (err) {
+            console.error("Detect Loop Error:", err);
+        }
         requestAnimationFrame(detect);
     }
 
-    // アラート演出
     let lastAlertTime = 0;
     function updateAlert(status) {
         const now = Date.now();
         alertFrame.className = "";
         
+        const infoEl = document.getElementById('info');
         if (status === "danger") {
             alertFrame.classList.add("danger-border");
-            if (now - lastAlertTime > 200) {
-                playBeep(880, 100); 
+            if (now - lastAlertTime > 250) {
+                playBeep(880, 150);
                 if (navigator.vibrate) navigator.vibrate(200);
                 lastAlertTime = now;
             }
-            document.getElementById('info').innerText = "⚠️ 危険：至近距離に人！";
-            document.getElementById('info').style.color = "red";
+            infoEl.innerText = "⚠️ 危険：至近距離！";
+            infoEl.style.color = "red";
         } else if (status === "warning") {
             alertFrame.classList.add("warning-border");
-            if (now - lastAlertTime > 600) {
-                playBeep(440, 200); 
+            if (now - lastAlertTime > 700) {
+                playBeep(440, 300);
                 lastAlertTime = now;
             }
-            document.getElementById('info').innerText = "⚡ 注意：接近";
-            document.getElementById('info').style.color = "yellow";
+            infoEl.innerText = "⚡ 注意：接近中";
+            infoEl.style.color = "yellow";
         } else {
-            document.getElementById('info').innerText = "✅ 監視中：異常なし";
-            document.getElementById('info').style.color = "lime";
+            infoEl.innerText = "✅ 監視中：異常なし";
+            infoEl.style.color = "lime";
         }
     }
 
-    // 設定キャプチャロジック
     function captureSize(target) {
-        const persons = lastPredictions.filter(p => p.class === 'person');
-        if (persons.length === 0) {
-            alert("人が検知されていません。カメラの前に立ってください。");
+        if (!lastPredictions || lastPredictions.length === 0) {
+            alert("検知データがありません。カメラに映ってください。");
             return;
         }
+        const persons = lastPredictions.filter(p => p.class === 'person');
+        if (persons.length === 0) {
+            alert("人物が検知されていません。カメラの前に立ってください。");
+            return;
+        }
+        
         const maxSize = Math.max(...persons.map(p => Math.max(p.bbox[2], p.bbox[3])));
         
         if (target === 'red') {
@@ -223,24 +207,30 @@
             DIST_YELLOW = maxSize;
             document.getElementById('yellowVal').innerText = Math.round(maxSize);
         }
-        alert("設定を更新しました。");
+        console.log(`Updated ${target} to ${maxSize}px`);
     }
 
-    // イベントリスナー
     document.getElementById('startBtn').onclick = async () => {
-        document.getElementById('overlay').style.display = 'none';
-        isMonitoring = true;
-        document.getElementById('info').innerText = "モデル読み込み中...";
-        model = await cocoSsd.load();
-        await setupCamera();
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        detect();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        document.getElementById('info').innerText = "AIモデル読込中...";
+        document.getElementById('startBtn').innerText = "読み込み中...";
+        document.getElementById('startBtn').disabled = true;
+
+        try {
+            model = await cocoSsd.load();
+            await setupCamera();
+            document.getElementById('overlay').style.display = 'none';
+            isMonitoring = true;
+            detect();
+        } catch (e) {
+            alert("エラーが発生しました: " + e.message);
+            location.reload();
+        }
     };
 
     document.getElementById('gearBtn').onclick = () => {
         const panel = document.getElementById('sidePanel');
-        panel.style.display = (panel.style.display === 'none') ? 'block' : 'none';
+        panel.style.display = (panel.style.display === 'none' || panel.style.display === '') ? 'block' : 'none';
     };
 
     document.getElementById('closePanel').onclick = () => {
@@ -249,6 +239,7 @@
 
     document.getElementById('setRedBtn').onclick = () => captureSize('red');
     document.getElementById('setYellowBtn').onclick = () => captureSize('yellow');
+
 </script>
 </body>
 </html>
