@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>重機安全監視システム - デモ版</title>
+    <title>重機安全監視システム - デモ版（修正版）</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
     <style>
@@ -26,6 +26,9 @@
         #closePanel { width: 100%; margin-top: 40px; padding: 15px; background: #555; color: white; border: none; border-radius: 8px; }
         
         #info { position: fixed; top: 15px; left: 15px; color: #0f0; z-index: 500; font-weight: bold; background: rgba(0,0,0,0.5); padding: 10px 15px; border-radius: 5px; font-size: 18px; }
+        
+        /* エラー表示用の通知スタイルを追加 */
+        #panel-notice { color: #ff4444; font-weight: bold; margin-top: 10px; text-align: center; min-height: 24px; }
     </style>
 </head>
 <body>
@@ -48,18 +51,19 @@
 
 <div id="sidePanel">
     <h2 style="text-align:center; margin-bottom:10px;">距離調整</h2>
+    <div id="panel-notice"></div>
     <hr>
     
     <div class="set-group">
         <p style="color:#ff4444; font-weight:bold;">🔴 危険 (至近距離)</p>
         <button id="setRedBtn" class="set-btn" style="background:#ff4444; color:white;">カメラの前に立ち<br>2m設定で保存</button>
-        <p>設定値: <span id="redVal">450</span> px</p>
+        <p>設定値(横幅): <span id="redVal">150</span> px</p>
     </div>
 
     <div class="set-group">
         <p style="color:#ffeb3b; font-weight:bold;">🟡 注意 (中間距離)</p>
         <button id="setYellowBtn" class="set-btn" style="background:#ffeb3b; color:black;">カメラの前に立ち<br>5m設定で保存</button>
-        <p>設定値: <span id="yellowVal">250</span> px</p>
+        <p>設定値(横幅): <span id="yellowVal">80</span> px</p>
     </div>
 
     <button id="closePanel">設定を閉じる</button>
@@ -71,11 +75,12 @@
     let canvas = document.getElementById('canvas');
     let ctx = canvas.getContext('2d', { alpha: true });
     let alertFrame = document.getElementById('alert-frame');
+    let panelNotice = document.getElementById('panel-notice');
     let lastPredictions = [];
     
-    // 距離の閾値（初期値）
-    let DIST_RED = 450;
-    let DIST_YELLOW = 250;
+    // 横幅基準（w）に変更したため、初期値を現実的なピクセル数（1280x720想定）に調整したわ
+    let DIST_RED = 150;
+    let DIST_YELLOW = 80;
     let isMonitoring = false;
 
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -119,10 +124,9 @@
         if (!isMonitoring) return;
 
         try {
-            const predictions = await model.detect(video, 3, 0.4); // 検出数制限とスコア下限で高速化
+            const predictions = await model.detect(video, 3, 0.4);
             lastPredictions = predictions;
             
-            // キャンバスのリサイズ確認
             if (canvas.width !== video.videoWidth) {
                 canvas.width = video.videoWidth;
                 canvas.height = video.videoHeight;
@@ -135,7 +139,9 @@
                 const p = predictions[i];
                 if (p.class === 'person') {
                     const [x, y, w, h] = p.bbox;
-                    const size = Math.max(w, h);
+                    
+                    // 【修正点】姿勢の影響を受けにくい「横幅（w）」を基準にするわ
+                    const size = w; 
 
                     let color = "#00FF00";
                     if (size >= DIST_RED) {
@@ -154,6 +160,7 @@
             updateAlert(maxStatus);
         } catch (err) {
             console.error("Detect Loop Error:", err);
+            // 🔴 ここでのリロードやループ停止を排除し、エラーが起きても次のフレーム処理を維持するわ
         }
         requestAnimationFrame(detect);
     }
@@ -187,27 +194,48 @@
         }
     }
 
+    // 画面を止めずにサイドパネル内に警告を表示する関数
+    function showNotice(msg) {
+        panelNotice.innerText = msg;
+        setTimeout(() => {
+            if (panelNotice.innerText === msg) panelNotice.innerText = "";
+        }, 4000); // 4秒後に自動消去
+    }
+
     function captureSize(target) {
+        // 【修正点】alert()を廃止して、画面がフリーズするのを防ぐわ
         if (!lastPredictions || lastPredictions.length === 0) {
-            alert("検知データがありません。カメラに映ってください。");
+            showNotice("❌ 検知データがありません。");
             return;
         }
         const persons = lastPredictions.filter(p => p.class === 'person');
         if (persons.length === 0) {
-            alert("人物が検知されていません。カメラの前に立ってください。");
+            showNotice("❌ 人物が検知されていません。");
             return;
         }
         
-        const maxSize = Math.max(...persons.map(p => Math.max(p.bbox[2], p.bbox[3])));
+        // ここでも「横幅（bbox[2]）」を取得するように変更しているわ
+        const maxWidth = Math.max(...persons.map(p => p.bbox[2]));
         
         if (target === 'red') {
-            DIST_RED = maxSize;
-            document.getElementById('redVal').innerText = Math.round(maxSize);
+            // 大小関係の論理チェックも追加したわよ
+            if (maxWidth <= DIST_YELLOW) {
+                showNotice("⚠️ 危険(2m)の値は注意(5m)より大きくしてください");
+                return;
+            }
+            DIST_RED = maxWidth;
+            document.getElementById('redVal').innerText = Math.round(maxWidth);
+            showNotice("🔴 危険距離を設定しました");
         } else {
-            DIST_YELLOW = maxSize;
-            document.getElementById('yellowVal').innerText = Math.round(maxSize);
+            if (maxWidth >= DIST_RED) {
+                showNotice("⚠️ 注意(5m)の値は危険(2m)より小さくしてください");
+                return;
+            }
+            DIST_YELLOW = maxWidth;
+            document.getElementById('yellowVal').innerText = Math.round(maxWidth);
+            showNotice("🟡 注意距離を設定しました");
         }
-        console.log(`Updated ${target} to ${maxSize}px`);
+        console.log(`Updated ${target} to ${maxWidth}px (Width-based)`);
     }
 
     document.getElementById('startBtn').onclick = async () => {
@@ -223,7 +251,7 @@
             isMonitoring = true;
             detect();
         } catch (e) {
-            alert("エラーが発生しました: " + e.message);
+            alert("カメラまたはAIの初期化エラー: " + e.message);
             location.reload();
         }
     };
@@ -231,6 +259,7 @@
     document.getElementById('gearBtn').onclick = () => {
         const panel = document.getElementById('sidePanel');
         panel.style.display = (panel.style.display === 'none' || panel.style.display === '') ? 'block' : 'none';
+        panelNotice.innerText = ""; // パネルを開いたときはメッセージをクリア
     };
 
     document.getElementById('closePanel').onclick = () => {
